@@ -2,8 +2,7 @@
 using System.Linq;
 using GemBox.Spreadsheet;
 
-
-namespace TableHandlers 
+namespace TableHandlers
 {
     /*
       Made by Alex K.
@@ -12,21 +11,30 @@ namespace TableHandlers
     {
         public class Table
         {
-            public Table()
+            public Table(Logger LogEntity = null)
             {
                 this.Settings = new _Settings();
                 this.RowFormatRules = new Row();
+
+                this.Log = LogEntity;
             }
 
+            private Logger Log;
+            public void WriteLog(string msg)
+            {
+                if (this.Log != null) this.Log.Write(msg);
+            }
             public abstract class Formattable
             {
                 private Table.Formatter[] formats;
                 public Formattable addFormat(Formatter f){
-                    if (formats != null) { 
+                    if (formats != null) {
                         var current_format_with_same_priority = formats.Where(x => x!=null && f != null && x.priority == f.priority).Select(x=>x).FirstOrDefault();
-                        if (current_format_with_same_priority == null) { 
+                        if (current_format_with_same_priority == null) 
+			{
                             Utilities.add<Formatter>(ref formats, f);
-                        } else
+                        }
+                        else
                         {
                             current_format_with_same_priority = f;
                         }
@@ -226,7 +234,8 @@ namespace TableHandlers
                 public int[] colNumbers;
                 public int[] groupNumbers;
 
-                public HeaderGroup(string name=""){
+                public HeaderGroup(string name = "")
+                {
                     this.Caption = name;
                 }
             }
@@ -244,7 +253,7 @@ namespace TableHandlers
             private void Reset() { this.lastDrawnNumber = 0; if (this.Settings.UseSmartResetForFixedColsAndRows) { if (this.isFirstInstanceDrawn == true) { this.Settings.FixFirstNColumns = 0; this.Settings.FixHeaderRows = false; this.isFirstInstanceDrawn = false; } } }
             public Pivot getRightBottomCorner()
             {
-                return new Pivot(this.pivot.lcRow+lastDrawnNumber, this.pivot.lcCol + this.headers.Length-1);
+                return new Pivot(this.pivot.lcRow + lastDrawnNumber, this.pivot.lcCol + this.headers.Length - 1);
             }
 
             public class _Settings
@@ -253,9 +262,10 @@ namespace TableHandlers
                 public bool BubbleColumnCaptions = false;
                 public bool FixHeaderRows = false;
                 public int FixFirstNColumns = 0;
+                public bool FixPivotBelowMinimumCoordinates = true;
                 public bool UseSmartResetForFixedColsAndRows = true;
             }
-            
+
 
             public class Pivot
             {
@@ -290,8 +300,8 @@ namespace TableHandlers
                 public int rowDataIndex;
                 public Row ColumnRowFormats;
 
-                
-                public Column EnableAutoMergeSameValues() {this.Settings.AutoMergeSameValues = true; return this;}
+
+                public Column EnableAutoMergeSameValues() { this.Settings.AutoMergeSameValues = true; return this; }
                 public Column EnableAutoMergeNextEmptyValues() { this.Settings.AutoMergeNextEmptyValues = true; return this; }
                 public Column UseRowDataAsInfoBlockDelimeter() { this.Settings.IsBlockDelimeter = true; return this; }
 
@@ -370,13 +380,13 @@ namespace TableHandlers
                 foreach (var col in colNames)
                 {
                     var colIndx = getColumnIndexByName(col);
-                    
+
                     foreach (var hg in headerGroups)
                     {
-                        if ((hg.colNumbers!=null)&&((Array.IndexOf(hg.colNumbers, colIndx))!=-1)&&(maxIndx<hg.level)) maxIndx = hg.level;
+                        if ((hg.colNumbers != null) && ((Array.IndexOf(hg.colNumbers, colIndx)) != -1) && (maxIndx < hg.level)) maxIndx = hg.level;
                     }
                 }
-                
+
                 return maxIndx;
             }
 
@@ -402,6 +412,19 @@ namespace TableHandlers
             {
                 if (this.pivot != null)
                 {
+                    if(this.pivot.lcCol < 1 || this.pivot.lcRow < 1)
+                    {
+                        WriteLog("Incorrect pivot / alignment ([Table].SetPivot(Pivot)) for left-upper corner detected. For GemboxApi start point coordinates are (0, 0).");
+                        if (this.Settings.FixPivotBelowMinimumCoordinates) {
+                            WriteLog("Incorrect pivot / alignment fixed by settings.");
+                            this.SetPivot(
+                                (this.pivot.lcCol < 0) ? 0 : this.pivot.lcCol,
+                                (this.pivot.lcRow < 0) ? 0 : this.pivot.lcRow
+                                );
+                        }
+                            else return;
+                    }
+
                     this.xs = xs;
 
                     this.Reset();
@@ -413,15 +436,19 @@ namespace TableHandlers
                         this.xs.Panes = new WorksheetPanes(PanesState.Frozen, this.pivot.lcCol + this.Settings.FixFirstNColumns, this.pivot.lcRow + lastDrawnNumber,/*break it all!""*/LeftTopUnfreezedCell, PanePosition.BottomRight);
                     }
 
-                    if (data!=null) this.DrawData(ref data);
+                    if (data != null) this.DrawData(ref data);
+                        else WriteLog("No input data has been given. Nothing to render.");
 
-                    if(this.Settings.UseSmartResetForFixedColsAndRows) if(this.isFirstInstanceDrawn == null) this.isFirstInstanceDrawn = true;
+                    if (this.Settings.UseSmartResetForFixedColsAndRows) if (this.isFirstInstanceDrawn == null) this.isFirstInstanceDrawn = true;
                 }
+                else WriteLog("No pivot / alignment for left-upper corner is set with ([Table].SetPivot(Pivot)). Impossible to render.");
             }
   
             private void DrawHeaders(){
-                if (this.headerGroups!=null)
+                WriteLog("Begin to render headers.");
+                if (this.headerGroups != null)
                 {
+                    WriteLog("Painting header groups.");
                     var max_lvl = this.headerGroups.Max(x => x.level);
                     for (int i = max_lvl; i > 0; i--)
                     {
@@ -440,16 +467,17 @@ namespace TableHandlers
                 bool atLeastOneColumnThatUsesLastRow = false;
                 if (this.Settings.BubbleColumnCaptions) {
                     atLeastOneColumnThatUsesLastRow = (this.headerGroups.SelectMany(x => x.colNumbers, (x, y) => new { col = y, level = x.level })
-                        .GroupBy(x => x.col, (x, y) => y.Count()).Where(x => x >= this.headerGroups.Select(z => z.level).Max()).Count()>0)?true:false;//.FirstOrDefault();
+                        .GroupBy(x => x.col, (x, y) => y.Count()).Where(x => x >= this.headerGroups.Select(z => z.level).Max()).Count() > 0) ? true : false;//.FirstOrDefault();
                 }
 
+                WriteLog("Writing headers.");
                 for (int i = 0; i < this.headers.Length; i++)
                 {
                     drawHeader(this.headers[i], (atLeastOneColumnThatUsesLastRow?lastDrawnNumber:lastDrawnNumber-1), i);
                 }
 
                 var By_the_way = this.IsMyBirthDay;
-                if(atLeastOneColumnThatUsesLastRow||!this.Settings.BubbleColumnCaptions) lastDrawnNumber++;
+                if (atLeastOneColumnThatUsesLastRow || !this.Settings.BubbleColumnCaptions) lastDrawnNumber++;
             }
 
 
@@ -460,10 +488,10 @@ namespace TableHandlers
                 bool is_margin_left = true;
                 for (int i = 0; i < colIndexes.Length; i++)
                 {
-                    if (i>0 && colIndexes[i] - colIndexes[i-1] != 1)
+                    if (i > 0 && colIndexes[i] - colIndexes[i - 1] != 1)
                     {
                         gbRng(lineNum, left, lineNum, colIndexes[i - 1]).Merge();
-                            
+
                         group.Format(gbRng(lineNum, left, lineNum, colIndexes[i - 1]));
                         if (is_margin_left)
                         {
@@ -472,8 +500,7 @@ namespace TableHandlers
                             is_margin_left = false;
                         }
                         left = colIndexes[i];
-                    }
-                  //  }
+                    }      
                 }
 
                 gbRng(lineNum, left, lineNum, colIndexes[colIndexes.Length-1]).Merge();
@@ -488,7 +515,8 @@ namespace TableHandlers
                 var Filler = new CrawlingObject();
                 for (int i = 0; i <= lastDrawnNumber; i++)
                 {
-                    var lvl = this.headerGroups.Where(x => (x.level == i+1) && (x.colNumbers.Contains(colNum))).FirstOrDefault();
+                    HeaderGroup lvl = null;
+                    if(this.headerGroups != null) lvl = this.headerGroups.Where(x => (x.level == i+1) && (x.colNumbers.Contains(colNum))).FirstOrDefault();
 
                     if (lvl == null){
                         if (Filler.lastValue != null)
@@ -506,7 +534,7 @@ namespace TableHandlers
                     }
                     if (lvl != null)
                     {
-                        if (Filler.lastValue == null && Filler.startPoint!=-1)
+                        if (Filler.lastValue == null && Filler.startPoint != -1)
                         {
                             gbRng(Filler.startPoint, colNum, Filler.endPoint, colNum).Merge();
                             column.Format(gbRng(Filler.startPoint, colNum, Filler.endPoint, colNum));
@@ -518,7 +546,7 @@ namespace TableHandlers
                     }
                 }
 
-
+                int top_cell = 0;
                 if (this.Settings.BubbleColumnCaptions)
                 {
                     if (Filler.startPoint <= lastLineNum)
@@ -527,42 +555,48 @@ namespace TableHandlers
                         column.Format(gbRng(Filler.startPoint, colNum, lastLineNum, colNum));
                     }
 
-                    int top_cell = lastDrawnNumber;
+                    top_cell = lastDrawnNumber;
 
-                    var tmp2 = this.headerGroups.Select(x => new { lvl = x.level, cols = x.colNumbers })
+                    if (this.headerGroups != null) {
+                        var tmp2 = this.headerGroups.Select(x => new { lvl = x.level, cols = x.colNumbers })
                         .GroupBy(x => x.lvl, (x, y) => new { lvl = x, contains = y.SelectMany(z => z.cols) })
-                        .ToDictionary(x=>x.lvl, (y)=>y.contains.ToArray()).OrderBy(x=>x.Key);//Where(x => !(x.colNumbers.Contains(colNum))).Select(x => x).ToArray();
-                    
-                    foreach(var tmp3 in tmp2)
-                    {
-                        if (!tmp3.Value.Contains(colNum)) { top_cell = tmp3.Key-1; break; }
-                    }
+                        .ToDictionary(x => x.lvl, (y) => y.contains.ToArray()).OrderBy(x => x.Key);//Where(x => !(x.colNumbers.Contains(colNum))).Select(x => x).ToArray();
 
-                    rng(top_cell, colNum).Value = column.Caption;
+                        foreach (var tmp3 in tmp2)
+                        {
+                            if (!tmp3.Value.Contains(colNum)) { top_cell = tmp3.Key - 1; break; }
+                        }
+                    }
                 }
                 else
                 {
                     gbRng(Filler.startPoint, colNum, lastDrawnNumber, colNum).Merge();
                     column.Format(gbRng(Filler.startPoint, colNum, lastDrawnNumber, colNum));
 
-                    var tmp2 = this.headerGroups.Select(x => new { lvl = x.level, cols = x.colNumbers })
+                    top_cell = 0;
+
+                    if (this.headerGroups != null)
+                    {
+                        var tmp2 = this.headerGroups.Select(x => new { lvl = x.level, cols = x.colNumbers })
                         .GroupBy(x => x.lvl, (x, y) => new { lvl = x, contains = y.SelectMany(z => z.cols) })
                         .ToDictionary(x => x.lvl, (y) => y.contains.ToArray()).OrderByDescending(x => x.Key);
 
-                    var top_cell = 0;
-
-                    foreach (var tmp3 in tmp2)
-                    {
-                        if (tmp3.Value.Contains(colNum)) {top_cell = tmp3.Key; break; } //else ;
+                        foreach (var tmp3 in tmp2)
+                        {
+                            if (tmp3.Value.Contains(colNum)) { top_cell = tmp3.Key; break; } //else ;
+                        }
                     }
-
-                    rng(top_cell, colNum).Value = column.Caption;
                 }
+
+                rng(top_cell, colNum).Value = column.Caption;
             }
 
 
             private void DrawData(ref object[][] DataArr)
             {
+                WriteLog("Begin to render data.");
+                WriteLog(DataArr.Length.ToString() + " of records total.");
+                WriteLog("Creating formats.");
                 //подгатавливаем общий формат
                 for (int j = 0; j < this.headers.Length; j++)
                 {
@@ -575,22 +609,23 @@ namespace TableHandlers
 
                 for (int i = 0; i < DataArr.Length; i++)
                 {
+                    if (i % 100 == 0 || i == DataArr.Length - 1) WriteLog("Row " + (i+1).ToString() + " (" + String.Format("{0:P}", ((float)(i+1)) / DataArr.Length) + ")");
                     var tmp = new object[this.headers.Length];
                     
                     for (int j = 0; j < tmp.Length; j++)
                     {
-                        tmp[j] = DataArr[i][this.headers[j].rowDataIndex];
+                        if (DataArr[i].Length > this.headers[j].rowDataIndex) tmp[j] = DataArr[i][this.headers[j].rowDataIndex];
                         //if (/*j != 2 && j != 3 &&*/ j != 4) continue;
 
                         var tmp_2 = tmp[j] as string;
-                        if (tmp_2 !=null && tmp_2 == "") tmp[j] = null;
+                        if (tmp_2 != null && tmp_2 == "") tmp[j] = null;
 
                         if (i == 0)
                         {
                             if ((this.headers[j].Settings.AutoMergeNextEmptyValues)
                                 && (tmp[j] != null)) delimetersTable[j] = new CrawlingObject(lastDrawnNumber, tmp[j]);
                             else if (this.headers[j].Settings.AutoMergeSameValues) delimetersTable[j] = new CrawlingObject(lastDrawnNumber, tmp[j]);
-                                    
+
                         }
                         else
                         {
@@ -598,7 +633,7 @@ namespace TableHandlers
                             {
                                 if (!this.headers[j].Settings.AutoMergeNextEmptyValues)
                                 {
-                                    if ((delimetersTable[j].lastValue != null && !delimetersTable[j].lastValue.Equals(tmp[j])) || (delimetersTable[j].lastValue == null && tmp[j]!=null))
+                                    if ((delimetersTable[j].lastValue != null && !delimetersTable[j].lastValue.Equals(tmp[j])) || (delimetersTable[j].lastValue == null && tmp[j] != null))
                                     {
                                         if (this.headers[j].Settings.AutoMergeSameValues) gbRng(delimetersTable[j].startPoint, j, delimetersTable[j].endPoint, j).Merge();//.Merged = true;
                                         //rng(delimetersTable[j].startPoint, j, delimetersTable[j].endPoint, j).Interior.Color = NetOffice.ExcelApi.Enums.XlRgbColor.rgbYellow;
@@ -634,7 +669,7 @@ namespace TableHandlers
                     if (isDelimeterAmongUs)
                     {
                         //rng(lastDrawnNumber, 8, lastDrawnNumber, 8).Interior.Color = NetOffice.ExcelApi.Enums.XlRgbColor.rgbFireBrick;
-                        
+
                         for (int z = 0; z < this.headers.Length; z++)
                         {
                             //if (z != 2 && z != 3 && z != 4) continue;
@@ -651,16 +686,18 @@ namespace TableHandlers
                     lastDrawnNumber++;
                 }
 
+
+                WriteLog("Finishing table.");
                 //закрываем сет
                 for (int z = 0; z < this.headers.Length; z++)
                 {
-                    if (((this.headers[z].Settings.AutoMergeNextEmptyValues || this.headers[z].Settings.AutoMergeSameValues))&&(delimetersTable[z] != null) && (delimetersTable[z].startPoint != -1) && (delimetersTable[z].startPoint != delimetersTable[z].endPoint))
+                    if (((this.headers[z].Settings.AutoMergeNextEmptyValues || this.headers[z].Settings.AutoMergeSameValues)) && (delimetersTable[z] != null) && (delimetersTable[z].startPoint != -1) && (delimetersTable[z].startPoint != delimetersTable[z].endPoint))
                     {
                         gbRng(delimetersTable[z].startPoint, z, delimetersTable[z].endPoint, z).Merge();//.Merged = true;//Interior.Color = NetOffice.ExcelApi.Enums.XlRgbColor.rgbYellowGreen;
                     }
                 }
             }
-     
+
             private GemBox.Spreadsheet.ExcelCell rng(int rx, int cy)
             {
                 return this.xs.Cells[this.pivot.lcRow + rx, this.pivot.lcCol + cy];

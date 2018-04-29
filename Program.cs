@@ -10,6 +10,26 @@ namespace Main
 {
     class Program
     {
+        public class Logger : TableHandlers.Logger
+        {
+            private string filePathAndName = String.Empty;
+
+            public Logger(string filePathAndName = null) : base()
+            {
+                if (filePathAndName != null) this.filePathAndName = filePathAndName+".txt";
+            }
+            public override void Write(string txt)
+            {
+                if (filePathAndName != String.Empty) { 
+                    if (File.GetLastWriteTime(filePathAndName) < DateTime.Now.AddDays(-2) || new FileInfo(filePathAndName).Length > 1024*8192){
+                        System.IO.File.WriteAllText(filePathAndName, string.Empty);
+                    }
+                    File.AppendAllText(filePathAndName, System.Environment.NewLine+DateTime.Now.ToString()+": "+txt);
+                }
+            }
+        }
+
+
         private static string Get_Full_Output_Path(string fileName) { return Path.GetPathRoot(Environment.SystemDirectory) + @"Reports_example\"+fileName; }
         static void Main(string[] args)
         {
@@ -40,7 +60,7 @@ namespace Main
                 if (a == "3") GenerateDemoUsingNetOffice(generated_data_as_2_dimensional_object_array, 1);
                 if (a == "4") GenerateDemoUsingGembox(generated_data_as_2_dimensional_object_array, 1);
             }
-
+            
             Console.ReadKey();
         }
 
@@ -105,7 +125,7 @@ namespace Main
 
         private static void CreateSCTableWithNetOffice(ref Worksheet WORK_SHEET)
         {
-            var table = new TableHandlers.ExcelTableHandler.Table();
+            var table = new TableHandlers.ExcelTableHandler.Table(new Logger(Get_Full_Output_Path("NetExcel table_demo log")));
 
             //Set specific fill for headers [using .Formatter; priority 1 is higher than 0]
             var styleH = new TableHandlers.ExcelTableHandler.Table.Formatter(CellFormatsExcel.Demo1.SCHeaderCell, 0);
@@ -187,7 +207,7 @@ namespace Main
 
         private static void CreateDemoHeadersTableWithNetOffice(ref Worksheet WORK_SHEET)
         {
-            var table = new TableHandlers.ExcelTableHandler.Table();
+            var table = new TableHandlers.ExcelTableHandler.Table(new Logger(Get_Full_Output_Path("NetExcel header_demo log")));
 
             //Setting global header style for text
             var HGeneral = new TableHandlers.ExcelTableHandler.Table.Formatter(CellFormatsExcel.Demo3.GeneralHeaderFormat, 0);
@@ -211,20 +231,20 @@ namespace Main
             table.addHeaderGroup("GR3", "HD4").addFormat(HGeneral).addFormat(HGr3);
 
             var data = ReportData.LoadDataDemo3();
-            WORK_SHEET.Cells[1, 2].Value = "Headers have 5 settings accessed via TABLE().Settings";
-            WORK_SHEET.Cells[2, 2].Value = "Settings // FixFirstNColumns = [int amount] and FixHeaderRows = [bool]";
-            WORK_SHEET.Cells[3, 2].Value = "Those are used to freeze some of vertical or horizontal areas of worksheet";
+            WORK_SHEET.Cells[2, 2].Value = "Headers have 5 settings accessed via TABLE().Settings";
+            WORK_SHEET.Cells[3, 2].Value = "Settings // FixFirstNColumns = [int amount] and FixHeaderRows = [bool]";
+            WORK_SHEET.Cells[4, 2].Value = "Those are used to freeze some of vertical or horizontal areas of worksheet";
             table.Settings.FixFirstNColumns = 1;
             table.Settings.FixHeaderRows = true;
             table.Settings.UseSmartResetForFixedColsAndRows = true;
-            table.SetPivot(new TableHandlers.ExcelTableHandler.Table.Pivot(5, 3));
+            table.SetPivot(new TableHandlers.ExcelTableHandler.Table.Pivot(6, 4));
             table.Draw(ref WORK_SHEET, ref data);
 
             table.Settings.BubbleColumnCaptions = true;
-            WORK_SHEET.Cells[2, table.getRightBottomCorner().lcCol+4].Value = "Settings // UseSmartResetForFixedColsAndRows = [bool] and BubbleColumnCaptions = [bool]";
-            WORK_SHEET.Cells[3, table.getRightBottomCorner().lcCol+4].Value = "SmartReset will cause the effect when only first drawn table freeze panes while single instance of ExcelTH is applied to draw";
-            WORK_SHEET.Cells[4, table.getRightBottomCorner().lcCol + 4].Value = "BubbleColumnCaptions rules whether captions should be closer to the top or to the bottom of header's area";
-            table.SetPivot(new TableHandlers.ExcelTableHandler.Table.Pivot(6, table.getRightBottomCorner().lcCol+4));
+            WORK_SHEET.Cells[2, table.getRightBottomCorner().lcCol+3].Value = "Settings // UseSmartResetForFixedColsAndRows = [bool] and BubbleColumnCaptions = [bool]";
+            WORK_SHEET.Cells[3, table.getRightBottomCorner().lcCol+3].Value = "SmartReset will cause the effect when only first drawn table freeze panes while single instance of ExcelTH is applied to draw";
+            WORK_SHEET.Cells[4, table.getRightBottomCorner().lcCol + 3].Value = "BubbleColumnCaptions rules whether captions should be closer to the top or to the bottom of header's area";
+            table.SetPivot(new TableHandlers.ExcelTableHandler.Table.Pivot(7, table.getRightBottomCorner().lcCol+3));
             table.Draw(ref WORK_SHEET, ref data);
 
             table.Settings.DrawHeaders = false;
@@ -375,7 +395,6 @@ namespace Main
         }
 
 
-
         private static void CreateDemoHeadersTableWithGembox(ref ExcelWorksheet WORK_SHEET)
         {
             var table = new TableHandlers.GemboxTableHandler.Table();
@@ -415,13 +434,13 @@ namespace Main
             WORK_SHEET.Cells[1, table.getRightBottomCorner().lcCol + 3].Value = "Settings // UseSmartResetForFixedColsAndRows = [bool] and BubbleColumnCaptions = [bool]";
             WORK_SHEET.Cells[2, table.getRightBottomCorner().lcCol + 3].Value = "SmartReset will cause the effect when only first drawn table freeze panes while single instance of ExcelTH is applied to draw";
             WORK_SHEET.Cells[3, table.getRightBottomCorner().lcCol + 3].Value = "BubbleColumnCaptions rules whether captions should be closer to the top or to the bottom of header's area";
-            table.SetPivot(new TableHandlers.GemboxTableHandler.Table.Pivot(6, table.getRightBottomCorner().lcCol + 4));
+            table.SetPivot(new TableHandlers.GemboxTableHandler.Table.Pivot(6, table.getRightBottomCorner().lcCol + 3));
             table.Draw(ref WORK_SHEET, ref data);
 
             table.Settings.DrawHeaders = false;
-            WORK_SHEET.Cells[table.getRightBottomCorner().lcRow + 2, table.pivot.lcCol-1].Value = "Settings // DrawHeaders = [bool]";
-            WORK_SHEET.Cells[table.getRightBottomCorner().lcRow + 3, table.pivot.lcCol-1].Value = "DrawHeaders is set to false if you want to hide all of the headers and header groups";
-            WORK_SHEET.Cells[table.getRightBottomCorner().lcRow + 4, table.pivot.lcCol-1].Value = "That's it. Enjoy!";
+            WORK_SHEET.Cells[table.getRightBottomCorner().lcRow + 3, table.pivot.lcCol].Value = "Settings // DrawHeaders = [bool]";
+            WORK_SHEET.Cells[table.getRightBottomCorner().lcRow + 4, table.pivot.lcCol].Value = "DrawHeaders is set to false if you want to hide all of the headers and header groups";
+            WORK_SHEET.Cells[table.getRightBottomCorner().lcRow + 5, table.pivot.lcCol].Value = "That's it. Enjoy!";
             table.SetPivot(new TableHandlers.GemboxTableHandler.Table.Pivot(table.getRightBottomCorner().lcRow + 6, table.pivot.lcCol));
             table.Draw(ref WORK_SHEET, ref data);
         }
